@@ -204,9 +204,3 @@ Frontend updates charts and stat cards in place
 - **macOS only** — relies entirely on macOS system commands. Will not work on Linux or Windows.
 - **Single user** — designed for local use on your own machine.
 - **No auth** — the server binds to `localhost` only, but there is no authentication layer. Do not expose it to a public network.
-
----
-
-## License
-
-MIT
