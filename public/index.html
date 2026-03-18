@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mac Stats</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #21262d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --accent:  #58a6ff;
+      --green:   #3fb950;
+      --yellow:  #d29922;
+      --red:     #f85149;
+      --purple:  #bc8cff;
+      --orange:  #ffa657;
+      --teal:    #39d353;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      padding: 10px 12px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .h-left { display: flex; align-items: baseline; gap: 10px; }
+    .h-left h1 { font-size: 15px; font-weight: 700; }
+    .h-left h1 span { color: var(--accent); }
+    .h-left p { font-size: 11px; color: var(--muted); }
+    .h-right { display: flex; align-items: center; gap: 10px; }
+    .live-badge {
+      display: flex; align-items: center; gap: 5px; font-size: 10px;
+      color: var(--green); background: rgba(63,185,80,.1);
+      border: 1px solid rgba(63,185,80,.25); border-radius: 20px; padding: 2px 8px;
+    }
+    .live-dot {
+      width: 5px; height: 5px; border-radius: 50%; background: var(--green);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .timer { font-size: 11px; color: var(--muted); }
+
+    /* ── Grid ── */
+    .grid {
+      flex: 1; min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: 5fr 3fr 2fr;
+      grid-template-areas:
+        "cpu  mem  sys"
+        "batt disk net"
+        "proc proc proc";
+      gap: 7px;
+    }
+    #card-cpu  { grid-area: cpu;  }
+    #card-mem  { grid-area: mem;  }
+    #card-sys  { grid-area: sys;  }
+    #card-batt { grid-area: batt; }
+    #card-disk { grid-area: disk; }
+    #card-net  { grid-area: net;  }
+    #card-proc { grid-area: proc; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 13px;
+      display: flex; flex-direction: column;
+      overflow: hidden; min-height: 0;
+      transition: border-color .2s;
+    }
+    .card:hover { border-color: #30363d; }
+    .card-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 7px; flex-shrink: 0;
+    }
+    .card-title { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+    /* ── Badges ── */
+    .badge { font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 20px; }
+    .bg-green  { background: rgba(63,185,80,.15);   color: var(--green);  border: 1px solid rgba(63,185,80,.25); }
+    .bg-yellow { background: rgba(210,153,34,.15);  color: var(--yellow); border: 1px solid rgba(210,153,34,.25); }
+    .bg-red    { background: rgba(248,81,73,.15);   color: var(--red);    border: 1px solid rgba(248,81,73,.25); }
+    .bg-muted  { background: rgba(139,148,158,.1);  color: var(--muted);  border: 1px solid rgba(139,148,158,.2); }
+    .bg-orange { background: rgba(255,166,87,.12);  color: var(--orange); border: 1px solid rgba(255,166,87,.25); }
+
+    /* ── Big number ── */
+    .big      { font-size: 32px; font-weight: 700; line-height: 1; }
+    .big-unit { font-size: 13px; color: var(--muted); font-weight: 400; }
+    .sub      { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Progress bars ── */
+    .prog-wrap  { margin: 5px 0 2px; flex-shrink: 0; }
+    .prog-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .prog-track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .prog-bar   { height: 100%; border-radius: 2px; transition: width .5s ease; }
+    .b-blue   { background: linear-gradient(90deg,#1f6feb,#58a6ff); }
+    .b-purple { background: linear-gradient(90deg,#8957e5,#bc8cff); }
+    .b-green  { background: linear-gradient(90deg,#1a7f37,#3fb950); }
+    .b-yellow { background: linear-gradient(90deg,#9e6a03,#d29922); }
+    .b-red    { background: linear-gradient(90deg,#b91c1c,#f85149); }
+    .b-orange { background: linear-gradient(90deg,#bd561d,#ffa657); }
+    .b-teal   { background: linear-gradient(90deg,#0d7377,#39d353); }
+
+    /* ── Chart ── */
+    .chart-wrap { flex: 1; min-height: 0; position: relative; margin-top: 6px; }
+
+    /* ── Row ── */
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; flex-shrink: 0; }
+    .row:last-child { border-bottom: none; }
+    .row-label { color: var(--muted); }
+    .row-val   { font-weight: 500; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; }
+
+    /* ── Donut ── */
+    .donut-row { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .donut-canvas-wrap { position: relative; width: 76px; height: 76px; flex-shrink: 0; }
+    .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+    .donut-pct { font-size: 14px; font-weight: 700; }
+    .donut-lbl { font-size: 9px; color: var(--muted); }
+    .legend    { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; padding: 1px 0; }
+    .legend-dot  { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .legend-name { color: var(--muted); flex: 1; }
+    .legend-val  { font-weight: 500; font-variant-numeric: tabular-nums; }
+
+    /* ── Swap bar ── */
+    .swap-row { display: flex; align-items: center; gap: 7px; margin-top: 6px; flex-shrink: 0; }
+    .swap-label { font-size: 10px; color: var(--muted); flex-shrink: 0; width: 34px; }
+    .swap-info  { font-size: 10px; color: var(--muted); white-space: nowrap; }
+
+    /* ── Available pill ── */
+    .avail-row { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; flex-shrink: 0; }
+    .avail-lbl { font-size: 10px; color: var(--muted); }
+    .avail-val { font-size: 11px; font-weight: 600; color: var(--teal); }
+
+    /* ── Battery ── */
+    .batt-bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-shrink: 0; }
+    .batt-outer { flex: 1; height: 16px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .batt-fill  { height: 100%; border-radius: 3px; display: flex; align-items: center; justify-content: flex-end; padding-right: 5px; font-size: 10px; font-weight: 700; transition: width .5s; }
+    .batt-tip   { width: 3px; height: 9px; background: var(--muted); border-radius: 0 2px 2px 0; flex-shrink: 0; }
+
+    /* ── Speed boxes ── */
+    .speed-row { display: flex; gap: 6px; margin-bottom: 5px; flex-shrink: 0; }
+    .speed-box { flex: 1; background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+    .speed-dir { font-size: 10px; color: var(--muted); margin-bottom: 1px; }
+    .speed-val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    /* ── Process table ── */
+    #card-proc .inner { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; min-height: 0; overflow: hidden; }
+    .proc-section-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 4px; }
+    .proc-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+    .proc-table th { text-align: left; color: var(--muted); font-weight: 500; padding: 0 0 3px; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
+    .proc-table th:not(:first-child), .proc-table td:not(:first-child) { text-align: right; }
+    .proc-table td { padding: 3px 0; font-variant-numeric: tabular-nums; }
+    .proc-table tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+    .proc-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hot  { color: var(--red); }
+    .warm { color: var(--orange); }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="h-left">
+    <h1>Mac <span>Stats</span></h1>
+    <p id="sys-sub">—</p>
+  </div>
+  <div class="h-right">
+    <span class="live-badge"><span class="live-dot"></span>Live</span>
+    <span class="timer" id="timer">—</span>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- CPU -->
+  <div class="card" id="card-cpu">
+    <div class="card-head">
+      <span class="card-title">⚡ CPU</span>
+      <span class="badge bg-muted" id="cpu-badge">—</span>
+    </div>
+    <div class="big" id="cpu-used">—<span class="big-unit">%</span></div>
+    <div class="sub" id="cpu-sub">—</div>
+    <div class="prog-wrap">
+      <div class="prog-label"><span>User</span><span id="cpu-user-v">—</span></div>
+      <div class="prog-track"><div class="prog-bar b-blue"   id="bar-user" style="width:0%"></div></div>
+    </div>
+    <div class="prog-wrap">
+      <div class="prog-label"><span>System</span><span id="cpu-sys-v">—</span></div>
+      <div class="prog-track"><div class="prog-bar b-purple" id="bar-sys"  style="width:0%"></div></div>
+    </div>
+    <div class="chart-wrap"><canvas id="chart-cpu"></canvas></div>
+  </div>
+
+  <!-- Memory -->
+  <div class="card" id="card-mem">
+    <div class="card-head">
+      <span class="card-title">🧠 Memory</span>
+      <div style="display:flex;gap:5px;align-items:center;">
+        <span class="badge" id="mem-pressure" style="display:none"></span>
+        <span class="badge bg-muted" id="mem-badge">—</span>
+      </div>
+    </div>
+    <!-- Donut + legend -->
+    <div class="donut-row">
+      <div class="donut-canvas-wrap">
+        <canvas id="chart-mem-donut"></canvas>
+        <div class="donut-center">
+          <span class="donut-pct" id="mem-pct">—</span>
+          <span class="donut-lbl">in use</span>
+        </div>
+      </div>
+      <div class="legend" id="mem-legend"></div>
+    </div>
+    <!-- Available (real number) -->
+    <div class="avail-row">
+      <span class="avail-lbl">Available (free + cached)</span>
+      <span class="avail-val" id="mem-avail">—</span>
+    </div>
+    <!-- Swap -->
+    <div class="swap-row">
+      <span class="swap-label">Swap</span>
+      <div class="prog-track" style="flex:1;height:4px;">
+        <div class="prog-bar b-orange" id="swap-bar" style="width:0%;height:100%;border-radius:2px;"></div>
+      </div>
+      <span class="swap-info" id="swap-info">—</span>
+    </div>
+    <div class="chart-wrap"><canvas id="chart-mem"></canvas></div>
+  </div>
+
+  <!-- System -->
+  <div class="card" id="card-sys">
+    <div class="card-head">
+      <span class="card-title">💻 System</span>
+      <span class="badge bg-muted" id="uptime-badge">—</span>
+    </div>
+    <div id="sys-rows" style="flex:1;overflow:hidden;"></div>
+  </div>
+
+  <!-- Battery -->
+  <div class="card" id="card-batt">
+    <div class="card-head">
+      <span class="card-title">🔋 Battery</span>
+      <span class="badge bg-muted" id="batt-badge">—</span>
+    </div>
+    <div id="batt-content" style="display:flex;flex-direction:column;flex:1;"></div>
+  </div>
+
+  <!-- Disk -->
+  <div class="card" id="card-disk">
+    <div class="card-head"><span class="card-title">💾 Disk</span></div>
+    <div id="disk-content" style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;"></div>
+  </div>
+
+  <!-- Network -->
+  <div class="card" id="card-net">
+    <div class="card-head"><span class="card-title">🌐 Network</span></div>
+    <div id="net-content" style="flex:1;display:flex;flex-direction:column;justify-content:space-around;overflow:hidden;"></div>
+  </div>
+
+  <!-- Processes -->
+  <div class="card" id="card-proc">
+    <div class="card-head"><span class="card-title">📋 Top Processes</span></div>
+    <div class="inner" id="proc-content"></div>
+  </div>
+
+</div>
+
+<script>
+// ── Charts ────────────────────────────────────────────────────────────────────
+const C = { blue:'#58a6ff', purple:'#bc8cff', green:'#3fb950', teal:'#39d353', orange:'#ffa657', muted:'#30363d' };
+
+Chart.defaults.color       = '#8b949e';
+Chart.defaults.font.family = '-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif';
+Chart.defaults.font.size   = 10;
+
+const LINE_OPTS = () => ({
+  responsive: true, maintainAspectRatio: false,
+  animation: { duration: 250 },
+  plugins: { legend: { display: false }, tooltip: { enabled: false } },
+  elements: { line: { tension: 0.4, borderWidth: 1.5, fill: true }, point: { radius: 0 } },
+  scales: {
+    x: { display: false },
+    y: { display: true, min: 0, max: 100, grid: { color: '#21262d' }, ticks: { maxTicksLimit: 3, callback: v => v + '%' } },
+  },
+});
+
+const mkH = (n = 40) => Array(n).fill(0);
+const push = (arr, v, n = 40) => { arr.push(v); if (arr.length > n) arr.shift(); };
+
+const H = { cpu: mkH(), mem: mkH() };
+
+const chartCPU = new Chart(document.getElementById('chart-cpu'), {
+  type: 'line',
+  data: { labels: mkH(), datasets: [{ data: [...H.cpu], borderColor: C.blue, backgroundColor: 'rgba(88,166,255,.07)' }] },
+  options: LINE_OPTS(),
+});
+const chartMEM = new Chart(document.getElementById('chart-mem'), {
+  type: 'line',
+  data: { labels: mkH(), datasets: [{ data: [...H.mem], borderColor: C.purple, backgroundColor: 'rgba(188,140,255,.07)' }] },
+  options: LINE_OPTS(),
+});
+
+let memDonut = null;
+function getMemDonut() {
+  if (!memDonut) {
+    memDonut = new Chart(document.getElementById('chart-mem-donut'), {
+      type: 'doughnut',
+      data: {
+        // Active | Wired | Compressed | Cached (inactive) | Free
+        labels: ['Active','Wired','Compressed','Cached','Free'],
+        datasets: [{
+          data: [20, 12, 10, 30, 28],
+          backgroundColor: [C.blue, C.purple, C.orange, C.teal, C.muted],
+          borderWidth: 0, hoverOffset: 3,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '72%',
+        animation: { duration: 350 },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ' ' + c.label + ': ' + c.parsed.toFixed(1) + '%' } },
+        },
+      },
+    });
+  }
+  return memDonut;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const barCls   = pct => pct < 60 ? 'b-green' : pct < 80 ? 'b-yellow' : 'b-red';
+const badgeCls = pct => pct < 60 ? 'bg-green' : pct < 80 ? 'bg-yellow' : 'bg-red';
+const cpuHeat  = pct => pct < 25 ? '' : pct < 60 ? 'warm' : 'hot';
+const fmtMB    = mb  => mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb.toFixed(mb >= 10 ? 0 : 1) + ' MB';
+
+function setBar(id, pct, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className   = 'prog-bar ' + (cls || barCls(pct));
+  el.style.width = Math.min(100, Math.max(0, pct)) + '%';
+}
+
+// ── CPU ───────────────────────────────────────────────────────────────────────
+function renderCPU(cpu, sys) {
+  const used = cpu.used ?? 0;
+  document.getElementById('cpu-used').innerHTML = `${used}<span class="big-unit">%</span>`;
+  document.getElementById('cpu-sub').textContent  = `${sys.cpuCores} cores  ·  load ${sys.loadAvg?.[0] ?? '—'}`;
+  document.getElementById('cpu-user-v').textContent = (cpu.user ?? 0).toFixed(1) + '%';
+  document.getElementById('cpu-sys-v').textContent  = (cpu.sys  ?? 0).toFixed(1) + '%';
+  setBar('bar-user', cpu.user);
+  setBar('bar-sys',  cpu.sys, 'b-purple');
+  const badge = document.getElementById('cpu-badge');
+  badge.textContent = used + '%'; badge.className = 'badge ' + badgeCls(used);
+  push(H.cpu, used);
+  chartCPU.data.datasets[0].data = [...H.cpu];
+  chartCPU.update('none');
+}
+
+// ── Memory ────────────────────────────────────────────────────────────────────
+function renderMemory(mem) {
+  const usedPct = mem.percent;
+  document.getElementById('mem-pct').textContent = usedPct + '%';
+
+  const badge = document.getElementById('mem-badge');
+  badge.textContent = usedPct + '%'; badge.className = 'badge ' + badgeCls(usedPct);
+
+  const pb = document.getElementById('mem-pressure');
+  if (mem.pressure !== 'normal') {
+    pb.style.display = ''; pb.textContent = mem.pressure === 'critical' ? '⚠ Critical' : '⚠ Warn';
+    pb.className = 'badge ' + (mem.pressure === 'critical' ? 'bg-red' : 'bg-yellow');
+  } else { pb.style.display = 'none'; }
+
+  // Donut: Active, Wired, Compressed, Cached (inactive), Free
+  const t  = mem.total;
+  const ap = parseFloat((mem.active     / t * 100).toFixed(1));
+  const wp = parseFloat((mem.wired      / t * 100).toFixed(1));
+  const cp = parseFloat((mem.compressed / t * 100).toFixed(1));
+  const ip = parseFloat((mem.inactive   / t * 100).toFixed(1));
+  const fp = Math.max(0, parseFloat((100 - ap - wp - cp - ip).toFixed(1)));
+  getMemDonut().data.datasets[0].data = [ap, wp, cp, ip, fp];
+  getMemDonut().update();
+
+  document.getElementById('mem-legend').innerHTML = [
+    [C.blue,   'Active',     mem.activeFmt],
+    [C.purple, 'Wired',      mem.wiredFmt],
+    [C.orange, 'Compressed', mem.compressedFmt],
+    [C.teal,   'Cached',     mem.inactiveFmt],   // inactive = reclaimable cache
+    [C.muted,  'Free',       mem.freeFmt],
+  ].map(([color, name, val]) => `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${color}"></div>
+      <span class="legend-name">${name}</span>
+      <span class="legend-val">${val}</span>
+    </div>`).join('');
+
+  // Available = free + cached (the real number)
+  document.getElementById('mem-avail').textContent = mem.availableFmt;
+
+  // Swap
+  const swap = mem.swap;
+  if (swap && swap.total > 0) {
+    setBar('swap-bar', swap.percent, swap.percent > 80 ? 'b-red' : 'b-orange');
+    document.getElementById('swap-info').textContent = `${swap.usedFmt} / ${swap.totalFmt}`;
+  } else {
+    setBar('swap-bar', 0, 'b-orange');
+    document.getElementById('swap-info').textContent = 'Not in use';
+  }
+
+  push(H.mem, usedPct);
+  chartMEM.data.datasets[0].data = [...H.mem];
+  chartMEM.update('none');
+}
+
+// ── System ────────────────────────────────────────────────────────────────────
+function renderSystem(sys) {
+  document.getElementById('sys-sub').textContent = `${sys.model}  ·  ${sys.cpuModel}`;
+  document.getElementById('uptime-badge').textContent = sys.uptime;
+  document.getElementById('sys-rows').innerHTML = [
+    ['Host',   sys.hostname],
+    ['OS',     sys.platform],
+    ['Model',  sys.model],
+    ['Chip',   sys.cpuModel],
+    ['RAM',    sys.totalRam],
+    ['Cores',  sys.cpuCores + ' logical'],
+    ['Uptime', sys.uptime],
+    ['Load',   sys.loadAvg?.join('  ') ?? '—'],
+  ].map(([k, v]) => `
+    <div class="row">
+      <span class="row-label">${k}</span>
+      <span class="row-val">${v}</span>
+    </div>`).join('');
+}
+
+// ── Battery ───────────────────────────────────────────────────────────────────
+function renderBattery(batt) {
+  const badge = document.getElementById('batt-badge');
+  const el    = document.getElementById('batt-content');
+
+  if (!batt || batt.percent == null) {
+    badge.textContent = 'N/A';
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;padding-top:4px;">No battery</div>';
+    return;
+  }
+
+  const pct  = batt.percent;
+  const bcls = pct > 50 ? 'b-green' : pct > 20 ? 'b-yellow' : 'b-red';
+  badge.textContent = pct + '%';
+  badge.className   = 'badge ' + badgeCls(100 - pct);
+
+  el.innerHTML = `
+    <div class="batt-bar-row">
+      <div class="batt-outer">
+        <div class="batt-fill ${bcls}" style="width:${pct}%;color:#0d1117;">${pct > 12 ? pct + '%' : ''}</div>
+      </div>
+      <div class="batt-tip"></div>
+      ${batt.charging ? '<span style="font-size:14px;margin-left:2px;">⚡</span>' : ''}
+    </div>
+    ${[
+      ['Status',              batt.status],
+      batt.timeRemaining
+        ? [batt.timeLabel,    batt.timeRemaining]   // "Time to full" when charging, "Time left" on battery
+        : null,
+      ['Source',              batt.onAC ? 'AC Power' : 'Battery'],
+      ['Health',              batt.healthy ? '✓ Normal' : '⚠ Service'],
+      batt.cycleCount != null
+        ? ['Cycles',          batt.cycleCount]
+        : null,
+    ].filter(Boolean).map(([k, v]) => `
+      <div class="row">
+        <span class="row-label">${k}</span>
+        <span class="row-val" style="${!batt.healthy && k==='Health' ? 'color:var(--red)' : ''}">${v}</span>
+      </div>`).join('')}`;
+}
+
+// ── Disk ──────────────────────────────────────────────────────────────────────
+function renderDisk(disks) {
+  const el = document.getElementById('disk-content');
+  if (!disks?.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;">No data</div>'; return; }
+  el.innerHTML = disks.map(d => `
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11px;margin-bottom:5px;">
+        <span style="font-weight:600;color:var(--accent);">Storage</span>
+        <span style="color:var(--muted);">${d.usedFmt} <span style="color:var(--border);">/</span> ${d.totalFmt}</span>
+      </div>
+      <div class="prog-track" style="height:8px;">
+        <div class="prog-bar ${barCls(d.percent)}" style="width:${d.percent}%;height:100%;border-radius:4px;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:5px;">
+        <span style="color:var(--muted);">${d.percent}% used</span>
+        <span style="color:var(--teal);font-weight:500;">${d.availFmt} free</span>
+      </div>
+    </div>`).join('');
+}
+
+// ── Network ───────────────────────────────────────────────────────────────────
+function renderNetwork(ifaces) {
+  const el = document.getElementById('net-content');
+  if (!ifaces?.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;">No data</div>'; return; }
+  el.innerHTML = ifaces.map(iface => `
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:5px;">${iface.name}</div>
+      <div class="speed-row">
+        <div class="speed-box"><div class="speed-dir">↓ Down</div><div class="speed-val">${iface.speedInFmt}</div></div>
+        <div class="speed-box"><div class="speed-dir">↑ Up</div><div class="speed-val">${iface.speedOutFmt}</div></div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);">${iface.totalIn} in  ·  ${iface.totalOut} out</div>
+    </div>`).join('');
+}
+
+// ── Processes — now shows real MB, not % ─────────────────────────────────────
+function renderProcesses(procs) {
+  const table = (list, label) => `
+    <div>
+      <div class="proc-section-label">Top by ${label}</div>
+      <table class="proc-table">
+        <thead><tr><th>Process</th><th>CPU%</th><th>RAM</th></tr></thead>
+        <tbody>${list.map(p => `
+          <tr>
+            <td class="proc-name" title="${p.name}">${p.name}</td>
+            <td class="${cpuHeat(p.cpu)}">${p.cpu.toFixed(1)}</td>
+            <td>${fmtMB(p.memMB)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('proc-content').innerHTML =
+    table(procs.byCPU, 'CPU') + table(procs.byMem, 'Memory');
+}
+
+// ── Poll ──────────────────────────────────────────────────────────────────────
+async function fetchStats() {
+  try {
+    const r = await fetch('/api/stats');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    renderCPU(d.cpu, d.system);
+    renderMemory(d.memory);
+    renderSystem(d.system);
+    renderBattery(d.battery);
+    renderDisk(d.disk);
+    renderNetwork(d.network);
+    renderProcesses(d.processes);
+  } catch (e) {
+    console.error('fetch failed', e);
+    document.getElementById('timer').textContent = '⚠ Error';
+  }
+}
+
+let countdown = 3;
+const timerEl = document.getElementById('timer');
+function tick() {
+  countdown--;
+  if (countdown <= 0) {
+    countdown = 3;
+    timerEl.textContent = 'Refreshing…';
+    fetchStats().then(() => { timerEl.textContent = 'Next in 3s'; });
+  } else {
+    timerEl.textContent = `Next in ${countdown}s`;
+  }
+}
+fetchStats();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
