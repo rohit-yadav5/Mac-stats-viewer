@@ -24,6 +24,7 @@ function runSpawn(bin, args = []) {
     const proc = spawn(bin, args);
     let out = '';
     proc.stdout.on('data', d => { out += d.toString(); });
+    proc.stderr.on('data', () => {}); // drain stderr to prevent buffer stall
     proc.on('close', () => resolve(out.trim()));
     proc.on('error', e => { console.error(`[spawn] ${bin}:`, e.message); resolve(''); });
   });
@@ -113,7 +114,9 @@ async function getMemory() {
     run('sysctl vm.swapusage'),
   ]);
 
-  const total = os.totalmem(), PAGE = 4096;
+  const total = os.totalmem();
+  const pageSizeMatch = vmOut.match(/page size of (\d+) bytes/);
+  const PAGE  = pageSizeMatch ? parseInt(pageSizeMatch[1]) : 4096; // 16 384 on Apple Silicon, 4 096 on Intel
   const get   = key => { const m = vmOut.match(new RegExp(key + ':\\s+(\\d+)')); return m ? parseInt(m[1]) * PAGE : 0; };
 
   const wired      = get('Pages wired down');
