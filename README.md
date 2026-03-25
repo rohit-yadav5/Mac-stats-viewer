@@ -43,7 +43,7 @@ All charts retain the last **40 data points** (~2 minutes of history).
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/your-username/mac-stats-viewer.git
+git clone https://github.com/rohit-yadav5/mac-stats-viewer.git
 cd mac-stats-viewer
 ```
 
